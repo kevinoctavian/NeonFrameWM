@@ -1,0 +1,8 @@
+
+
+
+[[Shortcut]]
+mod = NFK_SHIFT
+key = q
+command = quit
+args = 0

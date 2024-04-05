@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=NeonFrameWM
+Comment=Neon Frame made with love
+Exec=/home/vinuxkun/NeonFrameWM/build/src/NeonFrameWM
+Type=Application
