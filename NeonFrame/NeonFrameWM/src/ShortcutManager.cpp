@@ -45,6 +45,7 @@ void ShortcutManager::RegisterShortcut(uint16_t modifiers, xcb_keysym_t keysym, 
   {
     ERROR_LOG("NO SYMBOL")
     free(keycode);
+    return;
   }
 
   xcb_void_cookie_t cookie = xcb_grab_key_checked(_conn, 1, _screen->root, modifiers, *keycode, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);

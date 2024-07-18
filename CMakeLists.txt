@@ -14,4 +14,15 @@ message("adding compile devinition")
   add_compile_definitions(_DEBUG=1)
 endif()
 
-add_subdirectory(src)
+add_subdirectory(NeonFrame/NeonFrameWM)
+add_subdirectory(NeonFrame/NF_Image)
+
+# installing project to /usr/bin
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION /usr/bin)
+
+# installing the session file to /usr/share/xsession
+install(FILES NeonFrameWM.desktop DESTINATION /usr/share/xsessions)
+
+#installing default NeonFrameWM config toml file
+install(SCRIPT cmake/post_install.cmake)
+install(FILES NeonFrameConfig.toml DESTINATION /usr/share/neonframewm)

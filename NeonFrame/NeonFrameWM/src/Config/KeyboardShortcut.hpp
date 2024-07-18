@@ -41,8 +41,8 @@ struct KeyboardShortcut_t
 static const KeyboardShortcut_t NFWM_SHORTCUT_LIST[] = {
     /* MODIFIER,      KEYSYM,       FUNC,                     ARGS */
     { NFK_SUPER_CTRL, XK_c, &NFWM::ShortcutHandler::QuitHandler,  0 },
-    { NFK_SUPER, XK_t, &NFWM::ShortcutHandler::SpawnHandler, SPWNR("alacritty") },
-    { NFK_SUPER_CTRL, XK_s, &NFWM::ShortcutHandler::SpawnHandler, SPWNR("rofi -show drun") },
+    { NFK_SUPER, XK_t, &NFWM::ShortcutHandler::SpawnHandler, SPWNR("kitty") },
+    { NFK_SUPER_CTRL, XK_s, &NFWM::ShortcutHandler::SpawnHandler, SPWNR("rofi -show drun -show-icons") },
     { NFK_CTRL, XK_p, &NFWM::ShortcutHandler::SpawnHandler, SPWNR("echo memek") },
     { NFK_CTRL, XK_a, &NFWM::ShortcutHandler::TestHandler, 0 },
     { NFK_SUPER, XK_q, &NFWM::ShortcutHandler::KillClientHandler, 0}

@@ -7,6 +7,9 @@
 
 #include <xcb/xcb_event.h>
 #include <xcb/xcb_icccm.h>
+#include <xcb/xcb_image.h>
+
+#include "NF_Image.hpp"
 
 #include "Utils/ColorManager.hpp"
 #include "Utils/Cursor.hpp"
@@ -39,9 +42,9 @@ namespace NFWM
       _screen = screens.data;
     }
 
+    _desktopManager = std::unique_ptr<Desktop::DesktopManager>(new Desktop::DesktopManager(this, 4));
     _eventManager = std::unique_ptr<EventManager>(new EventManager(this));
     _shortcutManager = std::unique_ptr<ShortcutManager>(new ShortcutManager(this));
-    _clientManager = std::unique_ptr<Client::ClientManager>(new Client::ClientManager(this));
   }
 
   WindowManagers::~WindowManagers()
@@ -53,6 +56,11 @@ namespace NFWM
     }
 
     xcb_ungrab_keyboard(_connection, XCB_CURRENT_TIME);
+
+    xcb_destroy_window(_connection, _wmCheck);
+    xcb_destroy_window(_connection, _windowBackground);
+
+    xcb_flush(_connection);
     xcb_disconnect(_connection);
   }
 
@@ -64,16 +72,23 @@ namespace NFWM
       throw std::runtime_error("there is another WM running! Kill it first before run NFWM");
     }
 
-    Init();
+    if (Init())
+    {
+      throw std::runtime_error("Initiation is failed");
+    }
 
     xcb_flush(_connection);
     xcb_generic_event_t *ev;
+
     while (isRunning && (ev = xcb_wait_for_event(_connection)))
     {
+      // DEBUG_LOG("%s", xcb_event_get_label(ev->response_type));
       _eventManager->RecieveEvents(ev);
       free(ev);
     }
 
+    _desktopManager->ClearClient();
+    xcb_destroy_window(_connection, _wmCheck);
     return 0;
   }
 
@@ -84,30 +99,41 @@ namespace NFWM
 
     uint32_t mask = XCB_CW_BACK_PIXEL;
     uint32_t values[1] = {
-        Utils::ColorManager::RGBA(184, 0, 211, 1)};
+        Utils::ColorManager::RGBA(0, 255, 100, 255)};
 
-    xcb_void_cookie_t cwCookie = xcb_change_window_attributes_checked(_connection, _screen->root, mask, values);
+    _windowBackground = xcb_generate_id(_connection);
+    xcb_void_cookie_t cwCookie = xcb_create_window_checked(
+        _connection, XCB_COPY_FROM_PARENT, _windowBackground,
+        _screen->root, 0, 0, _screen->width_in_pixels, _screen->height_in_pixels,
+        0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT,
+        mask, &values);
     xcb_generic_error_t *err = xcb_request_check(_connection, cwCookie);
     if (err)
     {
       std::cout << "Error while change window attributes" << std::endl;
       return -1;
     }
+    xcb_map_window(_connection, _windowBackground);
 
+    _backgroundManager = std::unique_ptr<NF_Image::BackgroundManager>(
+        new NF_Image::BackgroundManager(_connection, "/home/vinuxkun/Pictures/bg.jpg", _windowBackground, _screen->root_depth));
+
+    _backgroundManager->DrawBackground(false, NF_Image::CENTERED);
     // Utils::Cursor::create_cursor(_connection, _screen, _screen->root, NFC_watch);
     Utils::Cursor::create_cursor(_connection, _screen, _screen->root, "left_ptr");
-
-    xcb_clear_area(_connection, 0, _screen->root, 0, 0, _screen->width_in_pixels, _screen->height_in_pixels);
-    xcb_flush(_connection);
-
     signal(SIGCHLD, SIG_IGN);
 
     isRunning = true;
 
-    std::cout << "initialing " << LENGTH(NFWM_SHORTCUT_LIST) << " Shortcut" << std::endl;
-
     GrabKey();
     GrabButtons(nullptr);
+
+    if (xcb_connection_has_error(_connection))
+    {
+      throw std::runtime_error("XCB Connection error after put image");
+    }
+
+    xcb_flush(_connection);
     return 0;
   }
 
@@ -157,6 +183,11 @@ namespace NFWM
           _ewmh->_NET_DESKTOP_VIEWPORT,
           _ewmh->_NET_NUMBER_OF_DESKTOPS,
           _ewmh->_NET_CURRENT_DESKTOP,
+          _ewmh->_NET_WM_WINDOW_TYPE,
+          _ewmh->_NET_WM_WINDOW_TYPE_DESKTOP,
+          _ewmh->_NET_WM_WINDOW_TYPE_DIALOG,
+          _ewmh->_NET_WM_WINDOW_TYPE_TOOLBAR,
+          _ewmh->_NET_WM_WINDOW_TYPE_DOCK,
       };
 
       xcb_ewmh_set_supported(_ewmh, 0, LENGTH(suported_atom), suported_atom);
@@ -165,23 +196,35 @@ namespace NFWM
     const char *name = "NeonFrameWM";
     xcb_ewmh_set_wm_name(_ewmh, _screen->root, strlen(name), name);
 
-    int desktop = 0;
-    xcb_ewmh_set_current_desktop(_ewmh, 0, desktop);
-    xcb_flush(_connection);
+    _desktopManager->SetupEWMH();
 
-    xcb_window_t wmCheck = xcb_generate_id(_connection);
+    _wmCheck = xcb_generate_id(_connection);
     xcb_create_window(
         _connection,
         XCB_COPY_FROM_PARENT,
-        wmCheck,
+        _wmCheck,
         _screen->root,
         0, 0, 1, 1, 0,
         XCB_WINDOW_CLASS_INPUT_OUTPUT,
         _screen->root_visual,
         XCB_EVENT_MASK_NO_EVENT, nullptr);
 
-    xcb_ewmh_set_supporting_wm_check(_ewmh, _screen->root, wmCheck);
-    xcb_ewmh_set_wm_name(_ewmh, wmCheck, strlen(name), name);
+    // set wm check ewmh
+    xcb_ewmh_set_supporting_wm_check(_ewmh, _screen->root, _wmCheck);
+    xcb_ewmh_set_wm_name(_ewmh, _wmCheck, strlen(name), name);
+
+    // set client ewmh
+    xcb_ewmh_set_active_window(_ewmh, 0, 0);
+    xcb_ewmh_set_client_list(_ewmh, 0, 0, nullptr);
+
+    // set dekstop geometry ewmh
+    xcb_ewmh_set_desktop_geometry(_ewmh, 0, _screen->width_in_pixels, _screen->height_in_pixels);
+    {
+      xcb_ewmh_coordinates_t coor = {0, 0};
+      xcb_ewmh_geometry_t geometris = {0, 0, _screen->width_in_pixels, _screen->height_in_pixels};
+      xcb_ewmh_set_desktop_viewport(_ewmh, 0, 2, &coor);
+      xcb_ewmh_set_workarea(_ewmh, 0, 1, &geometris);
+    }
 
     xcb_flush(_connection);
     return 0;
@@ -228,7 +271,7 @@ namespace NFWM
     xcb_grab_button(_connection, 1, _screen->root,
                     XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE,
                     XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, _screen->root,
-                    XCB_NONE, XCB_BUTTON_INDEX_1, NFK_SUPER);
+                    Utils::Cursor::get_cursor(_connection, _screen, _screen->root, "move"), XCB_BUTTON_INDEX_1, NFK_SUPER);
 
     // super key + middle click
     xcb_grab_button(_connection, 1, _screen->root,
@@ -240,20 +283,20 @@ namespace NFWM
                     XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE,
                     XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, _screen->root,
                     XCB_NONE, XCB_BUTTON_INDEX_3, NFK_SUPER);
-    xcb_grab_button(_connection, 1, _screen->root,
-                    XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE,
-                    XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, _screen->root,
-                    XCB_NONE, XCB_BUTTON_INDEX_4, XCB_NONE);
-    xcb_grab_button(_connection, 1, _screen->root,
-                    XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE,
-                    XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, _screen->root,
-                    XCB_NONE, XCB_BUTTON_INDEX_5, XCB_NONE);
+    // xcb_grab_button(_connection, 1, _screen->root,
+    //                 XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE,
+    //                 XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, _screen->root,
+    //                 XCB_NONE, XCB_BUTTON_INDEX_4, XCB_NONE);
+    // xcb_grab_button(_connection, 1, _screen->root,
+    //                 XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE,
+    //                 XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, _screen->root,
+    //                 XCB_NONE, XCB_BUTTON_INDEX_5, XCB_NONE);
   }
 
   void WindowManagers::Focus(Client::Client *client)
   {
-
-    if (_clientManager->GetCurrentClient() && _clientManager->GetCurrentClient() != client)
+    Client::ClientManager *desktop = _desktopManager->GetCurrentDesktop();
+    if (desktop && desktop->GetCurrentClient() && desktop->GetCurrentClient() != client)
       UnFocus(client);
 
     if (client)
@@ -265,25 +308,14 @@ namespace NFWM
       uint32_t col = Utils::ColorManager::RGB(152, 10, 223);
       xcb_change_window_attributes(_connection, client->GetWindow(), XCB_CW_BORDER_PIXEL, &col);
     }
-    else
-    {
-      // std::cout << "focus to root" << std::endl;
-      // xcb_set_input_focus(_connection, XCB_INPUT_FOCUS_POINTER_ROOT, XCB_NONE, XCB_CURRENT_TIME);
-      // xcb_delete_property(_connection, _screen->root, _ewmh->_NET_ACTIVE_WINDOW);
 
-      // if (_clientManager->GetCurrentClient())
-      // {
-      //   uint32_t col = Utils::ColorManager::RGB(55, 182, 12);
-      //   xcb_change_window_attributes(_connection, _clientManager->GetCurrentClient()->GetWindow(), XCB_CW_BORDER_PIXEL, &col);
-      // }
-    }
-
-    _clientManager->SetCurrentClient(client);
+    desktop->SetCurrentClient(client);
     xcb_flush(_connection);
   }
 
   void WindowManagers::UnFocus(Client::Client *client)
   {
+    xcb_ewmh_set_active_window(_ewmh, 0, 0);
     if (!client)
       return;
 
@@ -316,6 +348,11 @@ namespace NFWM
   void WindowManagers::Quit()
   {
     isRunning = false;
-    _clientManager->ClearClient();
+    _desktopManager->ClearClient();
+  }
+
+  void WindowManagers::RedrawBackground()
+  {
+    _backgroundManager->DrawBackground(true, NF_Image::CENTERED);
   }
 }

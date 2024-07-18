@@ -94,30 +94,39 @@ void ShortcutHandler::SpawnHandler(WindowManagers *wm, Varians_t params)
 void ShortcutHandler::TestHandler(WindowManagers *wm, Varians_t variant)
 {
 
-  std::cout << "berhasil ";
+  std::cout << "berhasil " << std::endl;
 
-  uint32_t mask = XCB_CW_BACK_PIXEL;
-  // uint32_t values = Utils::ColorManager::RGB(248, 255, 0);
-  uint32_t values = Utils::ColorManager::RGB(rand() % 256, rand() % 256, rand() % 256);
+  // uint32_t mask = XCB_CW_BACK_PIXEL;
+  // uint32_t values = 0x004F20FA;
+  // // uint32_t values = Utils::ColorManager::RGB(rand() % 256, rand() % 256, rand() % 256);
 
-  xcb_change_window_attributes(wm->GetConnection(), wm->GetScreen()->root, mask, &values);
+  // xcb_change_window_attributes(wm->GetConnection(), wm->GetScreen()->root, mask, &values);
 
-  xcb_clear_area(wm->GetConnection(), 0, wm->GetScreen()->root, 0, 0, wm->GetScreen()->width_in_pixels, wm->GetScreen()->height_in_pixels);
-  xcb_flush(wm->GetConnection());
+  // xcb_clear_area(wm->GetConnection(), 0, wm->GetScreen()->root, 0, 0, wm->GetScreen()->width_in_pixels, wm->GetScreen()->height_in_pixels);
+  // xcb_flush(wm->GetConnection());
 
-  std::cout << "Curent client total " << wm->GetClientManager()->Size() << std::endl;
-  wm->GetClientManager()->GetCurrentClient()->Show();
+  Client::Client *cl = wm->GetDesktopManager()->GetCurrentDesktop()->GetCurrentClient();
+  if (cl)
+  {
+    bool isHidden = cl->IsHidden();
+    if (isHidden)
+      cl->Show();
+    else
+      cl->Hide();
+  }
+
+  // std::cout << "_ewmh" << wm->GetEWMH() << std::endl;
 }
 
 void ShortcutHandler::KillClientHandler(WindowManagers *wm, Varians_t variant)
 {
-  Client::Client *client = wm->GetClientManager()->GetCurrentClient();
-  std::cout << "Trying to kill client " << (client ? client->GetWindow() : 0) << std::endl;
-
-  if (client)
+  Client::ClientManager *cm = wm->GetDesktopManager()->GetCurrentDesktop();
+  if (cm)
   {
-    std::cout << "Trying to kill client " << client->GetWindow() << std::endl;
-
-    wm->GetClientManager()->RemoveClient(client->GetWindow());
+    Client::Client *cl = cm->GetCurrentClient();
+    if (cl)
+    {
+      cm->RemoveClient(cl->GetWindow());
+    }
   }
 }

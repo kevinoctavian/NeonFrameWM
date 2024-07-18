@@ -5,22 +5,23 @@ add_executable(
   main.cpp
   
   # Client
-  ${PROJECT_NAME}/Client/Client.cpp
-  ${PROJECT_NAME}/Client/ClientManager.cpp
+  Client/Client.cpp
+  Client/ClientManager.cpp
+  Client/DesktopManager.cpp
 
   # Config
 
   # Utils
-  ${PROJECT_NAME}/Utils/ColorManager.cpp
-  ${PROJECT_NAME}/Utils/Cursor.cpp
+  Utils/ColorManager.cpp
+  Utils/Cursor.cpp
 
   # Window
 
   # Main Window Manager
-  ${PROJECT_NAME}/WindowManagers.cpp
-  ${PROJECT_NAME}/EventManager.cpp
-  ${PROJECT_NAME}/ShortcutManager.cpp
-  ${PROJECT_NAME}/ShortcutHandler.cpp
+  WindowManagers.cpp
+  EventManager.cpp
+  ShortcutManager.cpp
+  ShortcutHandler.cpp
   
 )
 
@@ -34,13 +35,11 @@ pkg_check_modules(XCBKEYSYMS REQUIRED IMPORTED_TARGET xcb-keysyms)
 pkg_check_modules(XCBCURSOR REQUIRED IMPORTED_TARGET xcb-cursor)
 pkg_check_modules(XCBEVENT REQUIRED IMPORTED_TARGET xcb-event)
 pkg_check_modules(XCBIMAGE REQUIRED IMPORTED_TARGET xcb-image)
-
-# more modules
-# wallpaper utility
-pkg_check_modules(LIBPNG REQUIRED IMPORTED_TARGET libpng)
-pkg_check_modules(LIbJPEG REQUIRED IMPORTED_TARGET libjpeg)
+pkg_check_modules(XCBSHAPE REQUIRED IMPORTED_TARGET xcb-shape)
+pkg_check_modules(XCBCOMPOSITE REQUIRED IMPORTED_TARGET xcb-composite)
 
 # Link library to project
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../NF_Image/src)
 target_link_libraries(
   ${PROJECT_NAME} PRIVATE
 
@@ -53,8 +52,10 @@ target_link_libraries(
   PkgConfig::XCBCURSOR
   PkgConfig::XCBEVENT
   PkgConfig::XCBIMAGE
-
-  # WALPAPER (JPG, PNG) Library
-  PkgConfig::LIBPNG
-  PkgConfig::LIbJPEG
+  PkgConfig::XCBSHAPE
+  PkgConfig::XCBRENDER
+  PkgConfig::XCBCOMPOSITE
+  
+  # Neonframe Image processing
+  NF_Image
 )

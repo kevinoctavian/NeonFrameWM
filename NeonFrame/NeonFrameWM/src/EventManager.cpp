@@ -1,5 +1,6 @@
 #include "EventManager.hpp"
 #include "WindowManagers.hpp"
+#include "Client/DesktopManager.hpp"
 
 #include "Constants/mask.hpp"
 #include "Constants/keysym.hpp"
@@ -9,8 +10,7 @@
 #include <iostream>
 
 #include <xcb/xcb_event.h>
-
-#include <xcb/shape.h>
+#include <xcb/xcb_icccm.h>
 
 using namespace NFWM;
 
@@ -23,6 +23,7 @@ EventManager::EventManager(WindowManagers *wm) : _wm(wm)
 
   _conn = _wm->GetConnection();
   keySymbol = xcb_key_symbols_alloc(_conn);
+  _desktopManager = _wm->GetDesktopManager();
 }
 
 EventManager::~EventManager()
@@ -139,6 +140,13 @@ int EventManager::RecieveEvents(xcb_generic_event_t *ev)
   case XCB_FOCUS_OUT:
     FocusOutHandler(reinterpret_cast<xcb_focus_out_event_t *>(ev));
     break;
+
+  /**
+   * Property changed
+   */
+  case XCB_PROPERTY_NOTIFY:
+    PropertyNotifyHandler(reinterpret_cast<xcb_property_notify_event_t *>(ev));
+    break;
   }
   return 0;
 }
@@ -173,7 +181,7 @@ void EventManager::ConfigureReqHandler(xcb_configure_request_event_t *ev)
   DEBUG_LOG("Configure Request from %d (%d)", ev->window, ev->parent)
 
   xcb_configure_window_value_list_t winVal;
-  if (_wm->GetClientManager()->GetClient(ev->window))
+  if (_desktopManager->GetClient(ev->window))
   {
   }
   else
@@ -191,7 +199,7 @@ void EventManager::ConfigureReqHandler(xcb_configure_request_event_t *ev)
 }
 void EventManager::MapReqHandler(xcb_map_request_event_t *ev)
 {
-  DEBUG_LOG("Map Request from %d (%d)", ev->window, ev->parent)
+  DEBUG_LOG("Map Request from %d (%d)", ev->window, ev->parent);
 
   xcb_get_window_attributes_cookie_t winAtCookie = xcb_get_window_attributes(_conn, ev->window);
   xcb_get_geometry_cookie_t winGeomCookie = xcb_get_geometry(_conn, ev->window);
@@ -218,9 +226,7 @@ void EventManager::MapReqHandler(xcb_map_request_event_t *ev)
   DEBUG_LOG("Map State %d", attrReply->map_state)
 
   // TODO: add client to wm list
-  _wm->GetClientManager()->AddClient(ev->window, attrReply, geomReply);
-
-  // _wm->InitShortcut();
+  _desktopManager->AddClient(ev->window, attrReply, geomReply);
 
   free(attrReply);
   free(geomReply);
@@ -242,9 +248,10 @@ void EventManager::ConfigureNotifyHandler(xcb_configure_notify_event_t *ev) {}
 void EventManager::CreateNotifyHandler(xcb_create_notify_event_t *ev) {}
 void EventManager::DestroyNotifyHandler(xcb_destroy_notify_event_t *ev)
 {
-  DEBUG_LOG("Destroy notify from %d (%d)", ev->window, ev->event)
+  DEBUG_LOG("Destroy notify from %d (%d)", ev->window, ev->response_type);
 
-  _wm->GetClientManager()->RemoveClient(ev->window);
+  _desktopManager->DestroyClient(ev->window);
+  _wm->RedrawBackground();
 }
 void EventManager::MapNotifyHandler(xcb_map_notify_event_t *ev)
 {
@@ -271,9 +278,9 @@ void EventManager::MappingNotifyHandler(xcb_mapping_notify_event_t *ev)
 }
 void EventManager::UnMapNotifyHandler(xcb_unmap_notify_event_t *ev)
 {
-  Client::Client *cl = _wm->GetClientManager()->GetClient(ev->window);
+  Client::Client *cl = _desktopManager->GetClient(ev->window);
 
-  DEBUG_LOG("UnMap Notify from %d (%d)", ev->window, ev->event)
+  DEBUG_LOG("UnMap Notify from %d (%d)", ev->window, ev->response_type)
 
   if (cl)
   {
@@ -285,15 +292,15 @@ void EventManager::VisibilityNotifyHandler(xcb_visibility_notify_event_t *ev) {}
 // Client message handler
 void EventManager::ClientMessageHandler(xcb_client_message_event_t *ev)
 {
-  DEBUG_LOG("Client Message from window %d type %d", ev->window, ev->type)
-
-  ev->type;
+  DEBUG_LOG("Client Message from window %d type %d", ev->window, xcb_event_get_request_label(ev->response_type));
 }
 
 // Exposure handler
 void EventManager::ExposeHandler(xcb_expose_event_t *ev)
 {
-  std::cout << "Expose Event, redraw background" << std::endl;
+  DEBUG_LOG("Expose Event, redraw background");
+
+  _wm->RedrawBackground();
 }
 
 // Window crossing handler
@@ -302,19 +309,10 @@ void EventManager::EnterNotifyHandler(xcb_enter_notify_event_t *ev)
   if ((ev->mode != XCB_NOTIFY_MODE_NORMAL || ev->detail == XCB_NOTIFY_DETAIL_INFERIOR) && ev->event != ev->root)
     return;
 
-  Client::Client *client = _wm->GetClientManager()->GetClient(ev->event);
-  // std::cout << "search for " << ev->event << " root id: " << ev->root << (client == nullptr ? " not found" : " found") << std::endl;
-
-  if (ev->event == ev->root)
-  {
-    // client->Kill();
-    // _wm->GetClientManager()->RemoveClient(ev->event);
-    // _wm->Focus(nullptr);
-  }
+  Client::Client *client = _desktopManager->GetClient(ev->event);
 
   if (client)
   {
-    // std::cout << "focusing to " << ev->event << std::endl;
     _wm->Focus(client);
   }
 }
@@ -325,7 +323,7 @@ void EventManager::FocusInHandler(xcb_focus_in_event_t *ev)
 {
   std::cout << "Focus in" << std::endl;
 
-  Client::ClientManager *clMan = _wm->GetClientManager();
+  Client::ClientManager *clMan = _desktopManager->GetCurrentDesktop();
 
   if (clMan->GetCurrentClient() && clMan->GetCurrentClient()->GetWindow() != ev->event)
   {
@@ -333,3 +331,31 @@ void EventManager::FocusInHandler(xcb_focus_in_event_t *ev)
   }
 }
 void EventManager::FocusOutHandler(xcb_focus_out_event_t *ev) {}
+
+void EventManager::PropertyNotifyHandler(xcb_property_notify_event_t *ev)
+{
+  if (ev->window == _wm->GetScreen()->root)
+    return;
+
+  if (ev->atom == XCB_ATOM_WM_NAME)
+  {
+    xcb_get_property_cookie_t propCookie = xcb_get_property(_conn, 0, ev->window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 0, 32);
+    xcb_get_property_reply_t *reply = xcb_get_property_reply(_conn, propCookie, nullptr);
+
+    if (reply)
+    {
+      int length = xcb_get_property_value_length(reply);
+      if (length > 0)
+      {
+        const char *wm_name = static_cast<const char *>(xcb_get_property_value(reply));
+        Client::Client *cl = _desktopManager->GetClient(ev->window);
+        if (cl)
+        {
+          DEBUG_LOG("window %d change name %s to %s", ev->window, cl->GetName(), wm_name);
+          cl->SetName(wm_name);
+        }
+      }
+      free(reply);
+    }
+  }
+}

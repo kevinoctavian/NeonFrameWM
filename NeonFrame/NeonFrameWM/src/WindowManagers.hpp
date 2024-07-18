@@ -8,7 +8,9 @@
 
 #include "EventManager.hpp"
 #include "ShortcutManager.hpp"
-#include "Client/ClientManager.hpp"
+#include "Client/DesktopManager.hpp"
+
+#include "NF_Image.hpp"
 
 namespace NFWM
 {
@@ -24,6 +26,12 @@ namespace NFWM
     // Multiple screen/monitor (incoming)
     // std::vector<xcb_screen_t *> _screens;
 
+    // wmcheck
+    xcb_window_t _wmCheck;
+
+    // background image/color window
+    xcb_window_t _windowBackground;
+
     // keep running?
     bool isRunning;
 
@@ -35,8 +43,10 @@ namespace NFWM
     // Another Manager
     std::unique_ptr<EventManager> _eventManager;
     std::unique_ptr<ShortcutManager> _shortcutManager;
+    std::unique_ptr<Desktop::DesktopManager> _desktopManager;
 
-    std::unique_ptr<Client::ClientManager> _clientManager;
+    // background image property
+    std::unique_ptr<NF_Image::BackgroundManager> _backgroundManager;
 
   public:
     WindowManagers(const char *displayName);
@@ -56,12 +66,14 @@ namespace NFWM
 
     bool SendEvent(xcb_window_t win, xcb_atom_t proto, int mask, long d0, long d1, long d2, long d3, long d4);
 
+    void RedrawBackground();
+
     // getter
     xcb_connection_t *GetConnection() { return _connection; }
     xcb_screen_t *GetScreen() { return _screen; }
     xcb_ewmh_connection_t *GetEWMH() { return _ewmh; }
     ShortcutManager *GetShortcutManager() { return _shortcutManager.get(); }
-    Client::ClientManager *GetClientManager() { return _clientManager.get(); }
+    Desktop::DesktopManager *GetDesktopManager() { return _desktopManager.get(); }
     xcb_atom_t GetDeleteWindowAtom() { return _WM_DELETE_WINDOW; }
     xcb_atom_t GetTakeFocusAtom() { return _WM_TAKE_FOCUS; }
   };

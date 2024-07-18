@@ -12,6 +12,7 @@ namespace NFWM::Utils
 {
   namespace Cursor
   {
+    xcb_cursor_t get_cursor(xcb_connection_t *conn, xcb_screen_t *screen, xcb_window_t win, const char *cursor_id);
     void create_cursor(xcb_connection_t *conn, xcb_screen_t *screen, xcb_window_t win, const char *cursor_id);
     void create_cursor(xcb_connection_t *conn, xcb_screen_t *screen, xcb_window_t win, int cursor_id);
   } // namespace Cursor

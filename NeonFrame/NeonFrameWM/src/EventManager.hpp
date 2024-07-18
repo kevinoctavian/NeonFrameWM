@@ -3,6 +3,8 @@
 #include <xcb/xcb_keysyms.h>
 #include <xcb/xcb.h>
 
+#include "Client/DesktopManager.hpp"
+
 namespace NFWM
 {
   class WindowManagers;
@@ -10,8 +12,9 @@ namespace NFWM
   {
   private:
     WindowManagers *_wm;
-    xcb_connection_t *_conn;
+    Desktop::DesktopManager *_desktopManager;
 
+    xcb_connection_t *_conn;
     xcb_key_symbols_t *keySymbol;
 
     // Events Function
@@ -51,6 +54,9 @@ namespace NFWM
     // Input focus handler
     void FocusInHandler(xcb_focus_in_event_t *ev);
     void FocusOutHandler(xcb_focus_out_event_t *ev);
+
+    // Property Notify Handler
+    void PropertyNotifyHandler(xcb_property_notify_event_t *ev);
 
   public:
     EventManager(WindowManagers *wm);

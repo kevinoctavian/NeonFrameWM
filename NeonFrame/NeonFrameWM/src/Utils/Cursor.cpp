@@ -4,13 +4,13 @@
 
 using namespace NFWM::Utils;
 
-void Cursor::create_cursor(xcb_connection_t *conn, xcb_screen_t *screen, xcb_window_t win, const char *cursor_id)
+xcb_cursor_t Cursor::get_cursor(xcb_connection_t *conn, xcb_screen_t *screen, xcb_window_t win, const char *cursor_id)
 {
   xcb_cursor_context_t *cursor_ctx = nullptr;
   if (xcb_cursor_context_new(conn, screen, &cursor_ctx) < 0)
   {
     std::cerr << "Error when init cursor context" << std::endl;
-    return;
+    return XCB_NONE;
   }
 
   xcb_cursor_t cursor = xcb_cursor_load_cursor(cursor_ctx, cursor_id);
@@ -21,7 +21,12 @@ void Cursor::create_cursor(xcb_connection_t *conn, xcb_screen_t *screen, xcb_win
   }
 
   xcb_cursor_context_free(cursor_ctx);
+  return cursor;
+}
 
+void Cursor::create_cursor(xcb_connection_t *conn, xcb_screen_t *screen, xcb_window_t win, const char *cursor_id)
+{
+  xcb_cursor_t cursor = get_cursor(conn, screen, win, cursor_id);
   xcb_change_window_attributes(conn, win, XCB_CW_CURSOR, &cursor);
 }
 
